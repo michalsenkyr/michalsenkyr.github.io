@@ -58,6 +58,12 @@
         //     }
         // }
     }
+    .shareaholic-share-buttons {
+        padding: 0 !important;
+    }
+    .shareaholic-share-button {
+        padding: 0 5px !important;
+    }
 }
 @media screen and (max-width: 770px) {
     .page[post] {

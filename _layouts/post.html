@@ -35,6 +35,10 @@ layout: default
         </article>
         <hr>
 
+        {% if site.shareaholic.below_post_id %}
+        <div class='shareaholic-canvas' data-app='share_buttons' data-app-id='{{site.shareaholic.below_post_id}}'></div>
+        {% endif %}
+
         {% assign hasSimilar = '' %}
         {% for post in site.related_posts %}
             {% assign postHasSimilar = false %}
