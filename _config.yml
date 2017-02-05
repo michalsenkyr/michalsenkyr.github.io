@@ -1,1 +1,33 @@
-theme: jekyll-theme-cayman
+title: Michal Senkyr's blog
+brief-intro:
+url: "https://michalsenkyr.github.io"
+
+permalink: /:year/:month/:title
+
+twitter_username: michalsenkyr
+facebook_username:
+github_username: michalsenkyr
+email:
+weibo_username:
+zhihu_username:
+linkedIn_username: michalsenkyr
+dribble_username:
+
+description_footer:
+
+duoshuo_shortname:
+disqus_shortname: michalsenkyr-blog
+
+baidu_tongji_id:
+google_analytics:id:
+
+markdown: kramdown
+kramdown:
+  input: GFM
+  syntax_highlighter: rouge
+
+category_dir: category/
+tag_dir: tag/
+
+gems: [jekyll-paginate]
+paginate: 6
