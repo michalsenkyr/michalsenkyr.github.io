@@ -14,6 +14,7 @@ I am a software engineer currently working in [Seznam.cz](https://seznam.cz) on 
 
 I also recently started contributing to the [Apache Spark](https://github.com/apache/spark) project during my free time.
 
+
 ## Motivation
 
 As part of my work on the various technologies, Big Data or otherwise, I am continually acquiring new knowledge in the field. Sadly, a lot of this knowledge necessitates wading through a lot of documentation, other blog posts, forum threads, source code, etc. As I already have some experience in explaining difficult to grasp concepts (I already lead lectures for my colleagues), I decided to also put it down in writing. My hope is that through this effort I might be able to assist people in understanding the wonderful technologies I am working with.

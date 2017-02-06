@@ -12,6 +12,7 @@ In this post, I explain how I ended up with my present blogging solution and pro
 
 As a Scala engineer, I always prized simplicity in all the projects I worked on. I do not like frontend development as I find it tedious and needlessly time-consuming, so I wanted to avoid that. However I also see myself as a "hacker" so I wanted to be able to freely tweak and customize my solution. That is why I didn't choose the insanely popular [WordPress](https://wordpress.com) platform (even though I was tempted by it more than once while setting things up). All the tools had to, of course, be free and open-source, so that I would be able to migrate should the need arise. And lastly, I wanted to be able to integrate my solution with GitHub and share it there.
 
+
 ## GitHub Pages
 
 Some time ago, I was exploring the possibilities of publishing Scaladoc using [sbt](http://www.scala-sbt.org) (I like to use it to build my personal projects) and I stumbled upon the [sbt-site](https://github.com/sbt/sbt-site) plugin. I did not get a chance to use it yet (we are still using Maven at work for Scala projects) but I remembered reading that it supported publishing to [GitHub Pages](https://pages.github.com). When looking into it, I found out that GitHub Pages was a free hosting for GitHub projects' static web pages. GitHub Pages work seamlessly with GitHub repositories by watching changes to the master branch and automatically deploy the changed files.

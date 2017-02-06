@@ -3,6 +3,7 @@ brief-intro:
 url: "https://michalsenkyr.github.io"
 
 permalink: /:year/:month/:title
+excerpt_separator: "\n\n\n"
 
 twitter_username: michalsenkyr
 facebook_username:
