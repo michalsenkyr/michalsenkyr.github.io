@@ -6,6 +6,9 @@ category: blog
 tags: personal blog
 ---
 
+* content
+{:toc}
+
 Hello, everyone, and welcome to my first blog.
 
 ## About me

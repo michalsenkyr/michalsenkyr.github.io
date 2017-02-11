@@ -6,6 +6,9 @@ category: blog
 tags: blog github gh-pages jekyll
 ---
 
+* content
+{:toc}
+
 In this post, I explain how I ended up with my present blogging solution and provide a simple guide to anyone who is interested in using the Jekyll/GitHub Pages combination to publish a site of their own.
 
 ## Motivation

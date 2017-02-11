@@ -6,6 +6,9 @@ category: spark
 tags: scala spark sparksql datasource parboiled
 ---
 
+* content
+{:toc}
+
 If you work with Big Data, you have probably heard about Apache Spark, the popular engine for large-scale distributed data processing. And if you followed the project's development, you know that its original RDD model was superseded by the much faster DataFrame model.
 Unfortunately, to gain in performance the model became much less weildy due to the new requirement of data schema specification. This was improved on by the presently used Dataset model which provided automatic schema inference based on language types, however the core logic remained largely the same. Because of that, extending the model is not such an easy task as one would think (especially if you want to do it properly).
 
