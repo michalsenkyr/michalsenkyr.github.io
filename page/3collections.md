@@ -14,6 +14,7 @@ type: page
 * [Kafka](http://kafka.apache.org/) - Distributed messaging engine
 * [Spark](https://spark.apache.org/) - Distributed batch processing framework
 * [Flink](http://flink.apache.org/) - Distributed stream processing framework
+* [ScyllaDB](http://www.scylladb.com/) - Distributed database focused on scalability, availability, latency and throughput
 
 ## Scala libraries
 
