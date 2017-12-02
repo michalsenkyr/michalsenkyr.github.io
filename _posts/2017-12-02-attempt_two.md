@@ -1,6 +1,6 @@
 ---
 title: Attempt 2 - Resources allocated
-date: 2017-12-02 12:07
+date: 2017-12-02 17:00
 layout: post
 category: blog
 tags: personal blog
