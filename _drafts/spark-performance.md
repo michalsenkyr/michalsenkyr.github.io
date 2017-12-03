@@ -9,6 +9,11 @@ tags: scala spark performance
 * content
 {:toc}
 
+Development of Spark jobs seems easy enough on the surface and for the most part it really is. The provided APIs are pretty well designed and feature-rich and if you are familiar with Scala collections or Java streams, you will be done with your implementation in no time. The hard part actually comes when running them on cluster and under full load as not all jobs are created equal in terms of performance. Unfortunately, to implement your jobs in an optimal way, you have to know quite a bit about Spark and its internals.
+
+In this article I will talk about the most common performance problems that you can run into when developing Spark applications and how to avoid or mitigate them.
+
+
 ## 1. Transformations (RDD)
 
 ## 2. Partitioning
