@@ -14,7 +14,15 @@ Development of Spark jobs seems easy enough on the surface and for the most part
 In this article I will talk about the most common performance problems that you can run into when developing Spark applications and how to avoid or mitigate them.
 
 
-## 1. Transformations (RDD)
+## 1. Transformations
+
+The most frequent performance problem, when working with the RDD API, is using transformations which are inadequate for the specific use case. I think this usually stems from the users' familiarity with SQL querying languages and its reliance on query optimizations. It is important to realize that the RDD API doesn't do any such optimizations.
+
+Let's take a look at these two definitions of the same computation:
+
+![RDD groupByKey vs reduceByKey comparison]
+
+The second definition is much faster than the first because it handles data more efficiently in the context of our use case.
 
 ## 2. Partitioning
 
