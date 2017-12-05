@@ -16,13 +16,27 @@ In this article I will talk about the most common performance problems that you 
 
 ## 1. Transformations
 
-The most frequent performance problem, when working with the RDD API, is using transformations which are inadequate for the specific use case. I think this usually stems from the users' familiarity with SQL querying languages and its reliance on query optimizations. It is important to realize that the RDD API doesn't do any such optimizations.
+The most frequent performance problem, when working with the RDD API, is using transformations which are inadequate for the specific use case. I think this usually stems from the users' familiarity with SQL querying languages and its reliance on query optimizations. It is important to realize that the RDD API doesn't apply any such optimizations.
 
 Let's take a look at these two definitions of the same computation:
 
 ![RDD groupByKey vs reduceByKey comparison]
 
-The second definition is much faster than the first because it handles data more efficiently in the context of our use case.
+The second definition is much faster than the first because it handles data more efficiently in the context of our use case by not collecting all the elements needlessly.
+
+We can observe a similar performance issue when making cartesian joins and later filtering on the resulting data instead of converting to a pair RDD and using an inner join:
+
+![RDD cartesian vs inner join comparison]
+
+The rule of thumb here is to always work with the minimal amount of data at transformation boundaries. The RDD API does its best to optimize background stuff like task scheduling, preferred locations based on data locality, etc. But it does not optimize the computations themselves. It is, in fact, literally impossible for it to do that as each transformation is defined by an opaque function and Spark has no way to see what data we're working with and how.
+
+There is another rule of thumb that can be derived from this: have rich transformations, ie. always do as much as possible in the context of a single transformation. A useful tool for that is the combineByKey transformation:
+
+![RDD combineByKey example]
+
+### DataFrames and Datasets
+
+The Spark community actually recognized these problems and developed two sets of high-level APIs to combat this issue: DataFrame and Dataset.
 
 ## 2. Partitioning
 
