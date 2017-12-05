@@ -36,7 +36,15 @@ There is another rule of thumb that can be derived from this: have rich transfor
 
 ### DataFrames and Datasets
 
-The Spark community actually recognized these problems and developed two sets of high-level APIs to combat this issue: DataFrame and Dataset.
+The Spark community actually recognized these problems and developed two sets of high-level APIs to combat this issue: DataFrame and Dataset. These APIs carry with them additional information about the data and define specific transformations that are recognized throughout the whole framework. When invoking an action, the computation graph is heavily optimized and converted into a corresponding RDD graph, which is executed.
+
+To demonstrate, we can try out two equivalent computations, defined in a very different way, and compare their run times and job graphs:
+
+![DataFrame optimization example]
+
+As we can see, the order of transformations does not matter, which is thanks to a feature called rule-based query optimization. Data sizes are also taken into account to reorder the job in the right way, thanks to cost-based query optimization. Lastly, the DataFrame API also pushes information about the columns that are actually required by the job to limit input reads (this is called predicate pushdown). It is actually very difficult to write an RDD job in such a way as to be on par with what the DataFrame API comes up with.
+
+However, there is one aspect in which DataFrames do not excel and which prompted the creation of another, third, way to represent Spark computations: type safety. As data columns are represented only by name for the purposes of transformation definitions and their valid usage with regards to the actual data types is only checked during run-time, this tends to result in a tedious development process where we need to keep track of all the proper types during development or we end up with an error.
 
 ## 2. Partitioning
 
