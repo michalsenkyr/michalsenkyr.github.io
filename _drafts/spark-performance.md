@@ -52,9 +52,17 @@ The Dataset API uses Scala's type inference and implicits-based techniques to pa
 
 Later it was realized that DataFrames can be thought of as just a special case of these Datasets and the API was unified (using a special optimized class called Row as the DataFrame's data type).
 
-However, there is one caveat to keep in mind when it comes to Datasets. As developers became comfortable with the collection-like RDD API, the Dataset API provided its own variant of its most popular methods - filter, map and reduce. These work (as would be expected) with arbitrary functions. As such, Spark cannot understand the details of such functions and its ability to optimize becomes somewhat impaired.
+However, there is one caveat to keep in mind when it comes to Datasets. As developers became comfortable with the collection-like RDD API, the Dataset API provided its own variant of its most popular methods - filter, map and reduce. These work (as would be expected) with arbitrary functions. As such, Spark cannot understand the details of such functions and its ability to optimize becomes somewhat impaired as it can no longer correctly propagate certain information (e.g. for predicate pushdown). This will be explained further in the section on serialization.
+
+![Dataset map inefficiency example]
 
 ## 2. Partitioning
+
+The number two problem that most Spark jobs suffer from, is inadequate partitioning of data. In order for our computations to be efficient, it is important to divide our data into a large enough number of partitions that are as close in size to one another (uniform) as possible, so that Spark can schedule the individual tasks that are operating on them in an agnostic manner and still perform predictably. If the partitions are not uniform, we say that the partitioning is skewed.
+
+![Partitioning skew example]
+
+This can happen for a number of reasons and in different parts of our computation. Our input can already be skewed when reading from the data source. In the RDD API this is most often done using the `textFile` and `wholeTextFiles` methods, which have surprisingly different partitioning behaviors.
 
 ## 3. Serialization
 
