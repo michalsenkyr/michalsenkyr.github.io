@@ -52,6 +52,8 @@ The Dataset API uses Scala's type inference and implicits-based techniques to pa
 
 Later it was realized that DataFrames can be thought of as just a special case of these Datasets and the API was unified (using a special optimized class called Row as the DataFrame's data type).
 
+However, there is one caveat to keep in mind when it comes to Datasets. As developers became comfortable with the collection-like RDD API, the Dataset API provided its own variant of its most popular methods - filter, map and reduce. These work (as would be expected) with arbitrary functions. As such, Spark cannot understand the details of such functions and its ability to optimize becomes somewhat impaired.
+
 ## 2. Partitioning
 
 ## 3. Serialization
