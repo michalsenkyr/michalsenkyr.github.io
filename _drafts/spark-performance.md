@@ -58,11 +58,13 @@ However, there is one caveat to keep in mind when it comes to Datasets. As devel
 
 ## 2. Partitioning
 
-The number two problem that most Spark jobs suffer from, is inadequate partitioning of data. In order for our computations to be efficient, it is important to divide our data into a large enough number of partitions that are as close in size to one another (uniform) as possible, so that Spark can schedule the individual tasks that are operating on them in an agnostic manner and still perform predictably. If the partitions are not uniform, we say that the partitioning is skewed.
+The number two problem that most Spark jobs suffer from, is inadequate partitioning of data. In order for our computations to be efficient, it is important to divide our data into a large enough number of partitions that are as close in size to one another (uniform) as possible, so that Spark can schedule the individual tasks that are operating on them in an agnostic manner and still perform predictably. If the partitions are not uniform, we say that the partitioning is skewed. This can happen for a number of reasons and in different parts of our computation.
 
 ![Partitioning skew example]
 
-This can happen for a number of reasons and in different parts of our computation. Our input can already be skewed when reading from the data source. In the RDD API this is most often done using the `textFile` and `wholeTextFiles` methods, which have surprisingly different partitioning behaviors.
+Our input can already be skewed when reading from the data source. In the RDD API this is often done using the `textFile` and `wholeTextFiles` methods, which have surprisingly different partitioning behaviors. The `textFile` method, which is designed to read individual lines of text from (usually larger) files, loads each input file block as a separate partition by default. It also provides a `minPartitions` parameter that, when greater than the number of blocks, tries to split these partitions further in order to satisfy the specified value. On the other hand, the `wholeTextFiles` method, which is used to read the whole contents of (usually smaller) files, combines the relevant files' blocks into pools by their actual locality inside the cluster and, by default, creates a partition for each of these pools. The `minPartitions` parameter in this case controls the maximum size of these pools (equalling `totalSize/minPartitions`). The default value for all `minPartitions` parameters is 2. This means that it is much easier to get a very low number of partitions with `wholeTextFiles` if using default settings while not managing data locality explicitly on the cluster. Other methods used to read data into RDDs include `sequenceFile` (TODO: Add partitioning info) and `hadoopRDD`/`newAPIHadoopRDD` where we can specify custom partitioning (TODO: Verify and add further info).
+
+Skew can also be introduced later via shuffles.
 
 ## 3. Serialization
 
