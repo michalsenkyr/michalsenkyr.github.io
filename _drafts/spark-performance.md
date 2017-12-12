@@ -76,6 +76,10 @@ Sometimes there are even better solutions, like using map-side joins if one of t
 
 ![RDD map-side join example]
 
+### DataFrames and Datasets
+
+The high-level APIs share a special approach to partitioning data. All data blocks of the input files are added into a common pool and this pool is divided into partitions according to 
+
 ## 3. Serialization
 
 ## 4. Memory management
