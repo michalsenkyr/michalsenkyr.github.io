@@ -76,9 +76,15 @@ Sometimes there are even better solutions, like using map-side joins if one of t
 
 ![RDD map-side join example]
 
+(add info on coalesce/repartition)
+
 ### DataFrames and Datasets
 
-The high-level APIs share a special approach to partitioning data. All data blocks of the input files are added into a common pool and this pool is divided into partitions according to 
+The high-level APIs share a special approach to partitioning data. All data blocks of the input files are added into common pools, just as in `wholeTextFiles`, but the pools are then divided into partitions according to two settings: `spark.sql.files.maxPartitionBytes`, which specifies a maximum partition size (128MB by default), and `spark.sql.files.openCostInBytes`, which specifies an estimated cost of opening a new file in bytes that could have been read (4MB by default). The framework will figure out the optimal partitioning of input data automatically based on this information.
+
+When it comes to partitioning on shuffles, the high-level APIs are, sadly, quite lacking (at least as of Spark 2.2). The number of partitions can only be specified statically on a job level by specifying the `spark.sql.shuffle.partitions` setting (200 by default).
+
+The high-level APIs can automatically convert join operations into broadcast joins. This is controlled by `spark.sql.autoBroadcastJoinThreshold`, which specifies the maximum size of tables considered for broadcasting (10MB by default) and `spark.sql.broadcastTimeout`, which controls how long executors will wait for broadcasted tables (5 minutes by default).
 
 ## 3. Serialization
 
