@@ -76,8 +76,6 @@ Sometimes there are even better solutions, like using map-side joins if one of t
 
 ![RDD map-side join example]
 
-(add info on coalesce/repartition)
-
 ### DataFrames and Datasets
 
 The high-level APIs share a special approach to partitioning data. All data blocks of the input files are added into common pools, just as in `wholeTextFiles`, but the pools are then divided into partitions according to two settings: `spark.sql.files.maxPartitionBytes`, which specifies a maximum partition size (128MB by default), and `spark.sql.files.openCostInBytes`, which specifies an estimated cost of opening a new file in bytes that could have been read (4MB by default). The framework will figure out the optimal partitioning of input data automatically based on this information.
@@ -85,6 +83,12 @@ The high-level APIs share a special approach to partitioning data. All data bloc
 When it comes to partitioning on shuffles, the high-level APIs are, sadly, quite lacking (at least as of Spark 2.2). The number of partitions can only be specified statically on a job level by specifying the `spark.sql.shuffle.partitions` setting (200 by default).
 
 The high-level APIs can automatically convert join operations into broadcast joins. This is controlled by `spark.sql.autoBroadcastJoinThreshold`, which specifies the maximum size of tables considered for broadcasting (10MB by default) and `spark.sql.broadcastTimeout`, which controls how long executors will wait for broadcasted tables (5 minutes by default).
+
+### Repartitioning
+
+All of the APIs also provide two methods to manipulate the number of partitions. The first one is `repartition` which forces a shuffle in order to redistribute the data among the specified number of partitions (by the aforementioned Murmur hash). As shuffling data is a costly operation, repartitioning should be avoided if possible. There are also more specific variants of this operation: RDDs have `repartitionAndSortWithinPartitions` which can be used with a custom partitioner, whereas DataFrames and Datasets have `repartition` with column parameters to control the partitioning characteristics.
+
+The second method provided by all APIs is `coalesce` which is much more performant than `repartition` because it does not shuffle data but only instructs Spark to read several existing partitions as one. This, however, can only be used to decrease the number of partitions and cannot be used to change partitioning characteristics. There is usually no reason to use it, as Spark is designed to take advantage of larger numbers of small partitions, other than reducing the number of files on output or number of batches when used together with `foreachPartition` (e.g. to send results to a database).
 
 ## 3. Serialization
 
