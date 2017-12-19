@@ -148,7 +148,17 @@ class SomeClass(d: Int) {
 
 Here we prepare the value by storing it in a local variable `sum`. This then gets serialized as a simple `Int` and doesn't drag the whole instance of `SomeClass` with it (so it does not have to extend `Serializable` anymore).
 
+Spark also defines a special construct to improve performance in cases where we need to serialize the same value for multiple transformations. It is called a broadcast variable and is serialized and sent only once, before the computation, to all executors. This is especially useful for large variables like lookup tables.
+
+(TODO: Broadcast example)
+
+Spark provides a useful tool to determine the actual size of objects in memory called [SizeEstimator](https://spark.apache.org/docs/latest/api/java/index.html?org/apache/spark/util/SizeEstimator.html) which can help us to decide whether a particular object is a good candidate for a broadcast variable.
+
+(TODO: Add info on accumulators?)
+
 ## 4. Memory management
+
+It is important for the application to use its memory space in an efficient manner. As each application's memory requirements are different, Spark divides the memory of an application's driver and executors into multiple parts that are governed by appropriate rules and leaves their size specification to the user via application settings.
 
 ## 5. Cluster resources
 
