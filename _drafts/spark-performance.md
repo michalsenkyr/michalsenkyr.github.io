@@ -160,6 +160,16 @@ Spark provides a useful tool to determine the actual size of objects in memory c
 
 It is important for the application to use its memory space in an efficient manner. As each application's memory requirements are different, Spark divides the memory of an application's driver and executors into multiple parts that are governed by appropriate rules and leaves their size specification to the user via application settings.
 
+### Driver memory
+
+(TODO: Add info on driver memory)
+
+### Executor memory
+
+(TODO: Spark executor memory diagram)
+
+Executors need to use their memory for a few main purposes: intermediate data for the current transformation (execution memory), persistent data for caching purposes (storage memory) and custom data structures used in transformations (user memory). As Spark can compute the actual size of each stored record, it is able to monitor the execution and storage parts and react accordingly. Execution memory is usually very volatile in size and needed in an immediate manner, whereas storage memory is longer-lived, stable, can usually be evicted to disk and applications usually need it just for certain parts of the whole computation (and sometimes not at all). For that reason Spark defines a shared space for both, giving more priority to execution memory.
+
 ## 5. Cluster resources
 
 
