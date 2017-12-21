@@ -201,7 +201,13 @@ We can also tweak Spark's configuration relating to locality when reading data f
 
 ### Dynamic allocation
 
-(TODO)
+Explicit application-wide allocation of executors can have its downsides. There are some instances in which we may not want to have a uniform number of executors for the duration of the whole computation but would instead want some scaling. There can be not enough resources available on the cluster at a given time but we would like to run our computation regardless, we may be processing a transformation that requires much less resources and would not like to hog more than we need, etc. This is where dynamic allocation comes in.
+
+With dynamic allocation (enabled by setting `spark.dynamicAllocation.enabled` to true) Spark begins each stage by trying to allocate as much executors as possible (up to the maximum parallelism of the given stage or `spark.dynamicAllocation.maxExecutors`, infinity by default), where first stage must get at least `spark.dynamicAllocation.initialExecutors` (same as `spark.dynamicAllocation.minExecutors` or `spark.executor.instances` by default).
+
+During computation, if an executor is idle for more than `spark.dynamicAllocation.executorIdleTimeout` (60 seconds by default) it gets removed (unless it would bring the number of executors below `spark.dynamicAllocation.minExecutors` (0 by default). This ensures that our application doesn't needlessly occupy cluster resources when performing cheaper transformations.
+
+In order to be able to enable dynamic allocation, we must also enable Spark's external shuffle service. This acts as a separate server running on each machine in the cluster that is able to manage shuffle files when the appropriate executor is no longer around (has been removed or lost). This is also beneficial in case of losing executors (e.g. due to pre-emptions) as the shuffle data in question does not have to be recomputed.
 
 ### Speculative execution
 
