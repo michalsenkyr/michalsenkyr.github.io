@@ -34,6 +34,10 @@ There is another rule of thumb that can be derived from this: have rich transfor
 
 (TODO: RDD combineByKey example)
 
+### Parallel transformations
+
+(TODO)
+
 ### DataFrames and Datasets
 
 The Spark community actually recognized these problems and developed two sets of high-level APIs to combat this issue: DataFrame and Dataset. These APIs carry with them additional information about the data and define specific transformations that are recognized throughout the whole framework. When invoking an action, the computation graph is heavily optimized and converted into a corresponding RDD graph, which is executed.
@@ -182,7 +186,7 @@ The last important point that is often a source of lowered performance is inadeq
 
 In order to achieve good performance, our application's computation should operate as close to the actual data as possible, to avoid unneeded transfers. That means it is a very good idea to run our executors on the machines that also store the data itself. When using HDFS Spark can optimize the allocation of executors in such a way as to maximize this probability. We can, however, increase this even further by good design.
 
-(TODO: multi-core executors and shuffles)
+We can reduce the amount of inter-node communication required by (TODO: cores)
 
 (TODO: Locality settings)
 
