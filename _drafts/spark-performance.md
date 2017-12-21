@@ -197,7 +197,7 @@ num_executors | executor_cores | executor_memory
 
 In all of the instances, we'll be using the same amount of resources (15 cores and 15GB of memory). However, as we reduce the overall number of executors, we also reduce the need to transport data between them. Making the third option usually the fastest. On the other hand, there can be limitations in I/O throughput on a node level, depending on the operations requested, so we cannot increase this indefinitely. For example, for HDFS I/O the number of cores per executor is thought to peak in performance at about five.
 
-(TODO: Locality settings)
+We can also tweak Spark's configuration relating to locality when reading data from the cluster using the `spark.locality.wait` setting (3 seconds by default) and its subsections (same as `spark.locality.wait` by default). These define timeouts for locality-based scheduling (lowering locality restrictions when they are reached).
 
 ### Dynamic allocation
 
