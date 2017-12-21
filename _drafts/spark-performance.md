@@ -186,7 +186,16 @@ The last important point that is often a source of lowered performance is inadeq
 
 In order to achieve good performance, our application's computation should operate as close to the actual data as possible, to avoid unneeded transfers. That means it is a very good idea to run our executors on the machines that also store the data itself. When using HDFS Spark can optimize the allocation of executors in such a way as to maximize this probability. We can, however, increase this even further by good design.
 
-We can reduce the amount of inter-node communication required by (TODO: cores)
+We can reduce the amount of inter-node communication required by increasing the resources of a single executor while decreasing the overall number of executors, essentially forcing tasks to be processed by a limited number of nodes. Take the following example resource distribution:
+
+(TODO: Check formatting)
+num_executors | executor_cores | executor_memory
+---|---|---
+15 | 1 | 1g
+5 | 3 | 3g
+3 | 5 | 5g
+
+In all of the instances, we'll be using the same amount of resources (15 cores and 15GB of memory). However, as we reduce the overall number of executors, we also reduce the need to transport data between them. Making the third option usually the fastest. On the other hand, there can be limitations in I/O throughput on a node level, depending on the operations requested, so we cannot increase this indefinitely. For example, for HDFS I/O the number of cores per executor is thought to peak in performance at about five.
 
 (TODO: Locality settings)
 
