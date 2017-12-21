@@ -211,7 +211,7 @@ In order to be able to enable dynamic allocation, we must also enable Spark's ex
 
 ### Speculative execution
 
-(TODO)
+Sometimes, even though we do everything correctly, we may still get poor performance on a specific machine due to circumstances outside our control (heavy load not related to Spark, hardware failures, etc.). For these cases, we may instruct Spark to re-execute tasks automatically after it detects such stragglers. To do this, enable the `spark.speculation` setting. The detection routine can be configured using this set of settings: `spark.speculation.interval` defines how often to check for stragglers (100ms by default), `spark.speculation.multiplier` defines how many times slower does the stragglers have to be (1.5 by default) and `spark.speculation.quantile` defines the fraction of tasks that have to be completed until the detection routine kicks in (0.75  by default).
 
 ## Conclusion
 
