@@ -20,19 +20,19 @@ The most frequent performance problem, when working with the RDD API, is using t
 
 Let's take a look at these two definitions of the same computation:
 
-![RDD groupByKey vs reduceByKey comparison]
+(TODO: RDD groupByKey vs reduceByKey comparison)
 
 The second definition is much faster than the first because it handles data more efficiently in the context of our use case by not collecting all the elements needlessly.
 
 We can observe a similar performance issue when making cartesian joins and later filtering on the resulting data instead of converting to a pair RDD and using an inner join:
 
-![RDD cartesian vs inner join comparison]
+(TODO: RDD cartesian vs inner join comparison)
 
 The rule of thumb here is to always work with the minimal amount of data at transformation boundaries. The RDD API does its best to optimize background stuff like task scheduling, preferred locations based on data locality, etc. But it does not optimize the computations themselves. It is, in fact, literally impossible for it to do that as each transformation is defined by an opaque function and Spark has no way to see what data we're working with and how.
 
 There is another rule of thumb that can be derived from this: have rich transformations, ie. always do as much as possible in the context of a single transformation. A useful tool for that is the combineByKey transformation:
 
-![RDD combineByKey example]
+(TODO: RDD combineByKey example)
 
 ### DataFrames and Datasets
 
@@ -40,7 +40,7 @@ The Spark community actually recognized these problems and developed two sets of
 
 To demonstrate, we can try out two equivalent computations, defined in a very different way, and compare their run times and job graphs:
 
-![DataFrame optimization example]
+(TODO: DataFrame optimization example)
 
 As we can see, the order of transformations does not matter, which is thanks to a feature called rule-based query optimization. Data sizes are also taken into account to reorder the job in the right way, thanks to cost-based query optimization. Lastly, the DataFrame API also pushes information about the columns that are actually required by the job to limit input reads (this is called predicate pushdown). It is actually very difficult to write an RDD job in such a way as to be on par with what the DataFrame API comes up with.
 
@@ -48,33 +48,33 @@ However, there is one aspect in which DataFrames do not excel and which prompted
 
 The Dataset API uses Scala's type inference and implicits-based techniques to pass around Encoders, special classes that describe the data types for Spark's optimizer just as in the case of DataFrames, while retaining compile-time typing in order to do type checking and write transformations naturally. If that sounds complicated, here is an example:
 
-![Dataset example]
+(TODO: Dataset example)
 
 Later it was realized that DataFrames can be thought of as just a special case of these Datasets and the API was unified (using a special optimized class called Row as the DataFrame's data type).
 
 However, there is one caveat to keep in mind when it comes to Datasets. As developers became comfortable with the collection-like RDD API, the Dataset API provided its own variant of its most popular methods - filter, map and reduce. These work (as would be expected) with arbitrary functions. As such, Spark cannot understand the details of such functions and its ability to optimize becomes somewhat impaired as it can no longer correctly propagate certain information (e.g. for predicate pushdown). This will be explained further in the section on serialization.
 
-![Dataset map inefficiency example]
+(TODO: Dataset map inefficiency example)
 
 ## 2. Partitioning
 
 The number two problem that most Spark jobs suffer from, is inadequate partitioning of data. In order for our computations to be efficient, it is important to divide our data into a large enough number of partitions that are as close in size to one another (uniform) as possible, so that Spark can schedule the individual tasks that are operating on them in an agnostic manner and still perform predictably. If the partitions are not uniform, we say that the partitioning is skewed. This can happen for a number of reasons and in different parts of our computation.
 
-![Partitioning skew example]
+(TODO: Partitioning skew example)
 
 Our input can already be skewed when reading from the data source. In the RDD API this is often done using the `textFile` and `wholeTextFiles` methods, which have surprisingly different partitioning behaviors. The `textFile` method, which is designed to read individual lines of text from (usually larger) files, loads each input file block as a separate partition by default. It also provides a `minPartitions` parameter that, when greater than the number of blocks, tries to split these partitions further in order to satisfy the specified value. On the other hand, the `wholeTextFiles` method, which is used to read the whole contents of (usually smaller) files, combines the relevant files' blocks into pools by their actual locality inside the cluster and, by default, creates a partition for each of these pools (for more information see Hadoop's [CombineFileInputFormat](http://hadoop.apache.org/docs/current/api/org/apache/hadoop/mapreduce/lib/input/CombineFileInputFormat.html) which is used in its implementation). The `minPartitions` parameter in this case controls the maximum size of these pools (equalling `totalSize/minPartitions`). The default value for all `minPartitions` parameters is 2. This means that it is much easier to get a very low number of partitions with `wholeTextFiles` if using default settings while not managing data locality explicitly on the cluster. Other methods used to read data into RDDs include other formats such as `sequenceFile`, `binaryFiles` and `binaryRecords`, as well as generic methods `hadoopRDD` and `newAPIHadoopRDD` which take custom format implementations (allowing for custom partitioning).
 
 Partitioning characteristics frequently change on shuffle boundaries. Operations that imply a shuffle therefore provide a `numPartitions` parameter that specify the new partition count (by default the partition count stays the same as in the original RDD). Skew can also be introduced via shuffles, especially when joining datasets.
 
-![RDD join skew example]
+(TODO: RDD join skew example)
 
 As the partitioning in these cases depends entirely on the selected key (specifically its Murmur3 hash), care has to be taken to avoid unusually large partitions being created for common keys (e.g. null keys are a common special case). An efficient solution is to separate the relevant records, introduce a salt (random value) to their keys and perform the subsequent action (e.g. reduce) for them in multiple stages to get the correct result.
 
-![RDD join salting example]
+(TODO: RDD join salting example)
 
 Sometimes there are even better solutions, like using map-side joins if one of the datasets is small enough.
 
-![RDD map-side join example]
+(TODO: RDD map-side join example)
 
 ### DataFrames and Datasets
 
@@ -98,13 +98,13 @@ Another thing that is tricky to take care of correctly is serialization, which c
 
 Spark supports two different serializers for data serialization. The default one is Java serialization which, although it is very easy to use (by simply implementing the `Serializable` interface), is very inefficient. That is why it is advisable to switch to the second supported serializer, [Kryo](https://github.com/EsotericSoftware/kryo), for the majority of production uses. This is done by setting `spark.serializer` to `org.apache.spark.serializer.KryoSerializer`. Kryo is much more efficient and does not require the classes to implement `Serializable` (as they are serialized by Kryo's [FieldSerializer](https://github.com/EsotericSoftware/kryo#fieldserializer) by default). However, in very rare cases, Kryo can fail to serialize some classes, which is the sole reason why it is still not Spark's default. It is also a good idea to register all classes that are expected to be serialized (Kryo will then be able to use indices instead of full class names to identify data types, reducing the size of the serialized data thereby increasing performance even further).
 
-![Kryo vs Java serialization benchmark]
+(TODO: Kryo vs Java serialization benchmark)
 
 ### DataFrames and Datasets
 
-The high-level APIs are much more efficient when it comes to data serialization as they are aware of the actual data types they are working with. Thanks to this, they can generate optimized serialization code tailored specifically to these types and to the way Spark will be using them in the context of the whole computation. For some transformations it might also generate only partial serialization code (e.g. array lookups). This code generation step is called Project Tungsten and is a big part of what makes the high-level APIs so performant.
+The high-level APIs are much more efficient when it comes to data serialization as they are aware of the actual data types they are working with. Thanks to this, they can generate optimized serialization code tailored specifically to these types and to the way Spark will be using them in the context of the whole computation. For some transformations it might also generate only partial serialization code (e.g. array lookups). This code generation step is a component of Project Tungsten which is a big part of what makes the high-level APIs so performant.
 
-![Project Tungsten serialization benchmark]
+(TODO: Project Tungsten serialization benchmark)
 
 ### Closure serialization
 
@@ -154,8 +154,6 @@ Spark also defines a special construct to improve performance in cases where we 
 
 Spark provides a useful tool to determine the actual size of objects in memory called [SizeEstimator](https://spark.apache.org/docs/latest/api/java/index.html?org/apache/spark/util/SizeEstimator.html) which can help us to decide whether a particular object is a good candidate for a broadcast variable.
 
-(TODO: Add info on accumulators?)
-
 ## 4. Memory management
 
 It is important for the application to use its memory space in an efficient manner. As each application's memory requirements are different, Spark divides the memory of an application's driver and executors into multiple parts that are governed by appropriate rules and leaves their size specification to the user via application settings.
@@ -170,42 +168,32 @@ It is important for the application to use its memory space in an efficient mann
 
 Executors need to use their memory for a few main purposes: intermediate data for the current transformation (execution memory), persistent data for caching (storage memory) and custom data structures used in transformations (user memory). As Spark can compute the actual size of each stored record, it is able to monitor the execution and storage parts and react accordingly. Execution memory is usually very volatile in size and needed in an immediate manner, whereas storage memory is longer-lived, stable, can usually be evicted to disk and applications usually need it just for certain parts of the whole computation (and sometimes not at all). For that reason Spark defines a shared space for both, giving priority to execution memory. All of this is controlled by several settings: `spark.executor.memory` (1GB by default) defines the total size of heap space available, `spark.memory.fraction` setting (0.6 by default) defines a fraction of heap (minus a 300MB buffer) for the memory shared by execution and storage and `spark.memory.storageFraction` (0.5 by default) defines the fraction of storage memory that is unevictable by execution. It is useful to define these in a manner most suitable for your application. If, for example, the application heavily uses cached data and does not use aggregations heavily, you can increase the fraction of storage memory to accommodate storing all cached data in RAM, there speeding up reads of the data. On the other hand, if the application uses costly aggregations and does not heavily rely on caching, increasing execution memory can help by evicting unneeded cached data to improve the computation itself. Furthermore, keep in mind that your custom objects have to fit into the user memory.
 
+Spark can also use off-heap memory for storage and part of execution, which is controlled by the settings `spark.memory.offHeap.enabled` (false by default) and `spark.memory.offHeap.size` (0 by default) and OFF_HEAP persistence level. This can mitigate garbage collection pauses.
+
+### DataFrames and Datasets
+
+The high-level APIs use their own way of managing memory as part of Project Tungsten. As the data types are known to the framework and their lifecycle is very well defined, garbage collection can be avoided altogether by pre-allocating chunks of memory and micromanaging these chunks explicitly. This results in great reuse of allocated memory, effectively eliminating the need for garbage collection in execution memory. This optimization actually works so well that enabling off-heap memory has very little additional benefit (although there is still some).
+
 ## 5. Cluster resources
 
+The last important point that is often a source of lowered performance is inadequate allocation of cluster resources. This takes many forms from inefficient use of data locality, through dealing with straggling executors, to preventing hogging cluster resources when they are not needed.
 
+### Data locality
 
-## Serialization
+In order to achieve good performance, our application's computation should operate as close to the actual data as possible, to avoid unneeded transfers. That means it is a very good idea to run our executors on the machines that also store the data itself. When using HDFS Spark can optimize the allocation of executors in such a way as to maximize this probability. We can, however, increase this even further by good design.
 
-* Closures
-* Kryo
-* Broadcast variables
-* Accumulators (imprecise)
-* Preferred locations (shuffle files, cache)
+(TODO: multi-core executors and shuffles)
 
-## RDD operations
+(TODO: Locality settings)
 
-* Efficient aggregation (groupByKey vs. reduceByKey, cartesian joins, combineByKey)
-* Partitioning (skew) - textFile, wholeTextFiles, DF partitioning
-* Tree aggregations
+### Dynamic allocation
 
-## DataFrames and Datasets
+(TODO)
 
-* Catalyst optimizer (rule, cost, source filters)
-* Project Tungsten (mem. mgmt, cache-aware, whole-stage codegen)
-* Component variants
+### Speculative execution
 
-## Memory usage
+(TODO)
 
-* Executor memory (storage vs. execution fraction)
-* No swapping, but spilling (spark.local.dir=/tmp)
-* Large working set on shuffle -> more tasks (>200ms)
-* Estimations (Storage tab, org.apache.spark.util.SizeEstimator.estimate)
-* Persistence levels (MEMORY_ONLY, MEMORY_AND_DISK, DISK_ONLY, *_SER, *_2, OFF_HEAP)
+## Conclusion
 
-## Dynamic allocation
-
-* External shuffle service
-* Exponential requests & idle removal
-
-## Speculative execution
-
+(TODO)
