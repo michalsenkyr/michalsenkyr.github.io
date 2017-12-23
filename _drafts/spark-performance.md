@@ -16,27 +16,85 @@ In this article I will talk about the most common performance problems that you 
 
 ## 1. Transformations
 
-The most frequent performance problem, when working with the RDD API, is using transformations which are inadequate for the specific use case. I think this usually stems from the users' familiarity with SQL querying languages and its reliance on query optimizations. It is important to realize that the RDD API doesn't apply any such optimizations.
+The most frequent performance problem, when working with the RDD API, is using transformations which are inadequate for the specific use case. This might possibly stem from many users' familiarity with SQL querying languages and its reliance on query optimizations. It is important to realize that the RDD API doesn't apply any such optimizations.
 
 Let's take a look at these two definitions of the same computation:
 
-(TODO: RDD groupByKey vs reduceByKey comparison)
+```scala
+val input = sc.parallelize(1 to 10000000, 42).map(x => (x % 42, x))
+val definition1 = input.groupByKey().mapValues(_.sum)
+val definition2 = input.reduceByKey(_ + _)
+```
+
+```
+== Lineage (definition1) ==
+(42) MapPartitionsRDD[3] at mapValues at <console>:26 []
+ |   ShuffledRDD[2] at groupByKey at <console>:26 []
+ +-(42) MapPartitionsRDD[1] at map at <console>:24 []
+    |   ParallelCollectionRDD[0] at parallelize at <console>:24 []
+
+== Lineage (definition2) ==
+(42) ShuffledRDD[4] at reduceByKey at <console>:26 []
+ +-(42) MapPartitionsRDD[1] at map at <console>:24 []
+    |   ParallelCollectionRDD[0] at parallelize at <console>:24 []
+
+== Timings ==
++-------+-----------------+-----------------+                                   
+|summary|      definition1|      definition2|
++-------+-----------------+-----------------+
+|  count|               10|               10|
+|   mean|           2646.3|            270.7|
+| stddev|2105.252481559186|456.5919768604496|
+|    min|             1570|               96|
+|    max|             8444|             1569|
++-------+-----------------+-----------------+
+```
 
 The second definition is much faster than the first because it handles data more efficiently in the context of our use case by not collecting all the elements needlessly.
 
 We can observe a similar performance issue when making cartesian joins and later filtering on the resulting data instead of converting to a pair RDD and using an inner join:
 
-(TODO: RDD cartesian vs inner join comparison)
+```scala
+val input1 = sc.parallelize(1 to 10000, 42)
+val input2 = sc.parallelize(1.to(100000, 17), 42)
+val definition1 = input1.cartesian(input2).filter { case (x1, x2) => x1 % 42 == x2 % 42 }
+val definition2 = input1.map(x => (x % 42, x)).join(input2.map(x => (x % 42, x))).map(_._2)
+```
+
+```
+== Lineage (definition1) ==
+(1764) MapPartitionsRDD[34] at filter at <console>:30 []
+  |    CartesianRDD[33] at cartesian at <console>:30 []
+  |    ParallelCollectionRDD[0] at parallelize at <console>:24 []
+  |    ParallelCollectionRDD[1] at parallelize at <console>:24 []
+
+== Lineage (definition2) ==
+(42) MapPartitionsRDD[40] at map at <console>:30 []
+ |   MapPartitionsRDD[39] at join at <console>:30 []
+ |   MapPartitionsRDD[38] at join at <console>:30 []
+ |   CoGroupedRDD[37] at join at <console>:30 []
+ +-(42) MapPartitionsRDD[35] at map at <console>:30 []
+ |  |   ParallelCollectionRDD[0] at parallelize at <console>:24 []
+ +-(42) MapPartitionsRDD[36] at map at <console>:30 []
+    |   ParallelCollectionRDD[1] at parallelize at <console>:24 []
+
+== Timings ==
++-------+-----------------+-----------------+
+|summary|      definition1|      definition2|
++-------+-----------------+-----------------+
+|  count|               10|               10|
+|   mean|           9255.3|           1525.0|
+| stddev|2633.881464050094|815.1734648390966|
+|    min|             3750|              623|
+|    max|            12077|             2759|
++-------+-----------------+-----------------+
+```
 
 The rule of thumb here is to always work with the minimal amount of data at transformation boundaries. The RDD API does its best to optimize background stuff like task scheduling, preferred locations based on data locality, etc. But it does not optimize the computations themselves. It is, in fact, literally impossible for it to do that as each transformation is defined by an opaque function and Spark has no way to see what data we're working with and how.
 
-There is another rule of thumb that can be derived from this: have rich transformations, ie. always do as much as possible in the context of a single transformation. A useful tool for that is the combineByKey transformation:
+There is another rule of thumb that can be derived from this: Use rich transformations, i.e. always do as much as possible in the context of a single transformation. A useful tool for that is the `combineByKey` method:
 
 (TODO: RDD combineByKey example)
-
-### Parallel transformations
-
-(TODO)
 
 ### DataFrames and Datasets
 
@@ -44,21 +102,119 @@ The Spark community actually recognized these problems and developed two sets of
 
 To demonstrate, we can try out two equivalent computations, defined in a very different way, and compare their run times and job graphs:
 
-(TODO: DataFrame optimization example)
+```scala
+val input1 = sc.parallelize(1 to 10000, 42).toDF("value1")
+val input2 = sc.parallelize(1.to(100000, 17), 42).toDF("value2")
+val definition1 = input1.crossJoin(input2).where('value1 % 42 === 'value2 % 42)
+val definition2 = input1.join(input2, 'value1 % 42 === 'value2 % 42)
+```
 
-As we can see, the order of transformations does not matter, which is thanks to a feature called rule-based query optimization. Data sizes are also taken into account to reorder the job in the right way, thanks to cost-based query optimization. Lastly, the DataFrame API also pushes information about the columns that are actually required by the job to limit input reads (this is called predicate pushdown). It is actually very difficult to write an RDD job in such a way as to be on par with what the DataFrame API comes up with.
+```
+== Parsed Logical Plan (definition1) ==
+'Filter (('value1 % 42) = ('value2 % 42))
++- Join Cross
+   :- Project [value#2 AS value1#4]
+   :  +- SerializeFromObject [input[0, int, false] AS value#2]
+   :     +- ExternalRDD [obj#1]
+   +- Project [value#9 AS value2#11]
+      +- SerializeFromObject [input[0, int, false] AS value#9]
+         +- ExternalRDD [obj#8]
+
+== Parsed Logical Plan (definition2) ==
+Join Inner, ((value1#4 % 42) = (value2#11 % 42))
+:- Project [value#2 AS value1#4]
+:  +- SerializeFromObject [input[0, int, false] AS value#2]
+:     +- ExternalRDD [obj#1]
++- Project [value#9 AS value2#11]
+   +- SerializeFromObject [input[0, int, false] AS value#9]
+      +- ExternalRDD [obj#8]
+
+== Physical Plan (definition1) ==
+*SortMergeJoin [(value1#4 % 42)], [(value2#11 % 42)], Cross
+:- *Sort [(value1#4 % 42) ASC NULLS FIRST], false, 0
+:  +- Exchange hashpartitioning((value1#4 % 42), 200)
+:     +- *Project [value#2 AS value1#4]
+:        +- *SerializeFromObject [input[0, int, false] AS value#2]
+:           +- Scan ExternalRDDScan[obj#1]
++- *Sort [(value2#11 % 42) ASC NULLS FIRST], false, 0
+   +- Exchange hashpartitioning((value2#11 % 42), 200)
+      +- *Project [value#9 AS value2#11]
+         +- *SerializeFromObject [input[0, int, false] AS value#9]
+            +- Scan ExternalRDDScan[obj#8]
+
+== Physical Plan (definition2) ==
+*SortMergeJoin [(value1#4 % 42)], [(value2#11 % 42)], Inner
+:- *Sort [(value1#4 % 42) ASC NULLS FIRST], false, 0
+:  +- Exchange hashpartitioning((value1#4 % 42), 200)
+:     +- *Project [value#2 AS value1#4]
+:        +- *SerializeFromObject [input[0, int, false] AS value#2]
+:           +- Scan ExternalRDDScan[obj#1]
++- *Sort [(value2#11 % 42) ASC NULLS FIRST], false, 0
+   +- Exchange hashpartitioning((value2#11 % 42), 200)
+      +- *Project [value#9 AS value2#11]
+         +- *SerializeFromObject [input[0, int, false] AS value#9]
+            +- Scan ExternalRDDScan[obj#8]
+
+== Timings ==
++-------+-----------------+----------------+                                    
+|summary|      definition1|     definition2|
++-------+-----------------+----------------+
+|  count|               10|              10|
+|   mean|           1598.3|          1770.9|
+| stddev|673.1339721366353|707.807954179663|
+|    min|              929|             744|
+|    max|             2765|            2954|
++-------+-----------------+----------------+
+```
+
+After the optimization, the original type and order of transformations does not matter, which is thanks to a feature called rule-based query optimization. Data sizes are also taken into account to reorder the job in the right way, thanks to cost-based query optimization. Lastly, the DataFrame API also pushes information about the columns that are actually required by the job to limit input reads (this is called predicate pushdown). It is actually very difficult to write an RDD job in such a way as to be on par with what the DataFrame API comes up with.
 
 However, there is one aspect in which DataFrames do not excel and which prompted the creation of another, third, way to represent Spark computations: type safety. As data columns are represented only by name for the purposes of transformation definitions and their valid usage with regards to the actual data types is only checked during run-time, this tends to result in a tedious development process where we need to keep track of all the proper types or we end up with an error. The Dataset API was created as a solution to this.
 
 The Dataset API uses Scala's type inference and implicits-based techniques to pass around Encoders, special classes that describe the data types for Spark's optimizer just as in the case of DataFrames, while retaining compile-time typing in order to do type checking and write transformations naturally. If that sounds complicated, here is an example:
 
-(TODO: Dataset example)
+```scala
+val input = sc.parallelize(1 to 10000000, 42)
+val definition = input.toDS.groupByKey(_ % 42).reduceGroups(_ + _)
+```
+
+```
+== Parsed Logical Plan ==
+'Aggregate [value#301], [value#301, unresolvedalias(reduceaggregator(org.apache.spark.sql.expressions.ReduceAggregator@1d490b2b, Some(unresolveddeserializer(upcast(getcolumnbyordinal(0, IntegerType), IntegerType, - root class: "scala.Int"), value#298)), Some(int), Some(StructType(StructField(value,IntegerType,false))), input[0, scala.Tuple2, true]._1 AS value#303, input[0, scala.Tuple2, true]._2 AS value#304, newInstance(class scala.Tuple2), input[0, int, false] AS value#296, IntegerType, false, 0, 0), Some(<function1>))]
++- AppendColumns <function1>, int, [StructField(value,IntegerType,false)], cast(value#298 as int), [input[0, int, false] AS value#301]
+   +- SerializeFromObject [input[0, int, false] AS value#298]
+      +- ExternalRDD [obj#297]
+
+== Physical Plan ==
+ObjectHashAggregate(keys=[value#301], functions=[reduceaggregator(org.apache.spark.sql.expressions.ReduceAggregator@1d490b2b, Some(value#298), Some(int), Some(StructType(StructField(value,IntegerType,false))), input[0, scala.Tuple2, true]._1 AS value#303, input[0, scala.Tuple2, true]._2 AS value#304, newInstance(class scala.Tuple2), input[0, int, false] AS value#296, IntegerType, false, 0, 0)], output=[value#301, ReduceAggregator(int)#309])
++- Exchange hashpartitioning(value#301, 200)
+   +- ObjectHashAggregate(keys=[value#301], functions=[partial_reduceaggregator(org.apache.spark.sql.expressions.ReduceAggregator@1d490b2b, Some(value#298), Some(int), Some(StructType(StructField(value,IntegerType,false))), input[0, scala.Tuple2, true]._1 AS value#303, input[0, scala.Tuple2, true]._2 AS value#304, newInstance(class scala.Tuple2), input[0, int, false] AS value#296, IntegerType, false, 0, 0)], output=[value#301, buf#383])
+      +- AppendColumnsWithObject <function1>, [input[0, int, false] AS value#298], [input[0, int, false] AS value#301]
+         +- Scan ExternalRDDScan[obj#297]
+
+== Timings ==
++-------+-----------------+
+|summary|       definition|
++-------+-----------------+
+|  count|               10|
+|   mean|            554.9|
+| stddev|70.65793971270635|
+|    min|              472|
+|    max|              728|
++-------+-----------------+
+```
 
 Later it was realized that DataFrames can be thought of as just a special case of these Datasets and the API was unified (using a special optimized class called Row as the DataFrame's data type).
 
 However, there is one caveat to keep in mind when it comes to Datasets. As developers became comfortable with the collection-like RDD API, the Dataset API provided its own variant of its most popular methods - filter, map and reduce. These work (as would be expected) with arbitrary functions. As such, Spark cannot understand the details of such functions and its ability to optimize becomes somewhat impaired as it can no longer correctly propagate certain information (e.g. for predicate pushdown). This will be explained further in the section on serialization.
 
 (TODO: Dataset map inefficiency example)
+
+### Parallel transformations
+
+Spark can run multiple computations in parallel. This is easily achieved by starting multiple threads on the driver and issuing a set of transformations in each of them. The resulting tasks are then run concurrently and share the application's resources. This ensures that the resources are never kept idle (e.g. while waiting for the last tasks of a particular transformation to finish). By default, tasks are processed in a FIFO manner (on the job level), but this can be changed by using an alternative in-application scheduler to ensure fairness (by setting `spark.scheduler.mode` to `FAIR`). Threads are then expected to set their scheduling pool by setting the `spark.scheduler.pool` local property (using `SparkContext.setLocalProperty`) to the appropriate pool name. Per-pool resource allocation configuration should then be provided in an [XML file](https://spark.apache.org/docs/latest/job-scheduling.html#configuring-pool-properties) defined by the `spark.scheduler.allocation.file` setting (by default this is `fairscheduler.xml` in Spark's conf folder).
+
+(TODO: Parallel transformations example)
 
 ## 2. Partitioning
 
@@ -172,7 +328,7 @@ It is important for the application to use its memory space in an efficient mann
 
 Executors need to use their memory for a few main purposes: intermediate data for the current transformation (execution memory), persistent data for caching (storage memory) and custom data structures used in transformations (user memory). As Spark can compute the actual size of each stored record, it is able to monitor the execution and storage parts and react accordingly. Execution memory is usually very volatile in size and needed in an immediate manner, whereas storage memory is longer-lived, stable, can usually be evicted to disk and applications usually need it just for certain parts of the whole computation (and sometimes not at all). For that reason Spark defines a shared space for both, giving priority to execution memory. All of this is controlled by several settings: `spark.executor.memory` (1GB by default) defines the total size of heap space available, `spark.memory.fraction` setting (0.6 by default) defines a fraction of heap (minus a 300MB buffer) for the memory shared by execution and storage and `spark.memory.storageFraction` (0.5 by default) defines the fraction of storage memory that is unevictable by execution. It is useful to define these in a manner most suitable for your application. If, for example, the application heavily uses cached data and does not use aggregations heavily, you can increase the fraction of storage memory to accommodate storing all cached data in RAM, there speeding up reads of the data. On the other hand, if the application uses costly aggregations and does not heavily rely on caching, increasing execution memory can help by evicting unneeded cached data to improve the computation itself. Furthermore, keep in mind that your custom objects have to fit into the user memory.
 
-Spark can also use off-heap memory for storage and part of execution, which is controlled by the settings `spark.memory.offHeap.enabled` (false by default) and `spark.memory.offHeap.size` (0 by default) and OFF_HEAP persistence level. This can mitigate garbage collection pauses.
+Spark can also use off-heap memory for storage and part of execution, which is controlled by the settings `spark.memory.offHeap.enabled` (false by default) and `spark.memory.offHeap.size` (0 by default) and `OFF_HEAP` persistence level. This can mitigate garbage collection pauses.
 
 ### DataFrames and Datasets
 
@@ -188,12 +344,11 @@ In order to achieve good performance, our application's computation should opera
 
 We can reduce the amount of inter-node communication required by increasing the resources of a single executor while decreasing the overall number of executors, essentially forcing tasks to be processed by a limited number of nodes. Take the following example resource distribution:
 
-(TODO: Check formatting)
-num_executors | executor_cores | executor_memory
----|---|---
-15 | 1 | 1g
-5 | 3 | 3g
-3 | 5 | 5g
+| num_executors | executor_cores | executor_memory |
+|--------------:|---------------:|----------------:|
+| 15            | 1              | 1g              |
+| 5             | 3              | 3g              |
+| 3             | 5              | 5g              |
 
 In all of the instances, we'll be using the same amount of resources (15 cores and 15GB of memory). However, as we reduce the overall number of executors, we also reduce the need to transport data between them. Making the third option usually the fastest. On the other hand, there can be limitations in I/O throughput on a node level, depending on the operations requested, so we cannot increase this indefinitely. For example, for HDFS I/O the number of cores per executor is thought to peak in performance at about five.
 
