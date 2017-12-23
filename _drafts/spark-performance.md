@@ -320,7 +320,9 @@ It is important for the application to use its memory space in an efficient mann
 
 ### Driver memory
 
-(TODO: Add info on driver memory)
+(TODO: Spark driver memory diagram)
+
+Driver's memory structure is quite straightforward. It merely uses all its configured memory (governed by the `spark.driver.memory` setting, 1GB by default) as its shared heap space. In a cluster deployment setting there is also an overhead added to prevent YARN from killing the driver container prematurely for using too much resources.
 
 ### Executor memory
 
