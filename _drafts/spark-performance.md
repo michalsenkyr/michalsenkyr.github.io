@@ -92,9 +92,19 @@ val definition2 = input1.map(x => (x % 42, x)).join(input2.map(x => (x % 42, x))
 
 The rule of thumb here is to always work with the minimal amount of data at transformation boundaries. The RDD API does its best to optimize background stuff like task scheduling, preferred locations based on data locality, etc. But it does not optimize the computations themselves. It is, in fact, literally impossible for it to do that as each transformation is defined by an opaque function and Spark has no way to see what data we're working with and how.
 
-There is another rule of thumb that can be derived from this: Use rich transformations, i.e. always do as much as possible in the context of a single transformation. A useful tool for that is the `combineByKey` method:
+There is another rule of thumb that can be derived from this: Use rich transformations, i.e. always do as much as possible in the context of a single transformation. A useful tool for that is the `combineByKeyWithClassTag` method:
 
-(TODO: RDD combineByKey example)
+```scala
+val input = sc.parallelize(1 to 1000000, 42).keyBy(_ % 1000)
+val combined = input.combineByKeyWithClassTag((x: Int) => Set(x / 1000), (s: Set[Int], x: Int) => s + x / 1000, (s1: Set[Int], s2: Set[Int]) => s1 ++ s2)
+```
+
+```
+== Lineage ==
+(42) ShuffledRDD[61] at combineByKeyWithClassTag at <console>:28 []
+ +-(42) MapPartitionsRDD[57] at keyBy at <console>:25 []
+    |   ParallelCollectionRDD[56] at parallelize at <console>:25 []
+```
 
 ### DataFrames and Datasets
 
@@ -208,7 +218,37 @@ Later it was realized that DataFrames can be thought of as just a special case o
 
 However, there is one caveat to keep in mind when it comes to Datasets. As developers became comfortable with the collection-like RDD API, the Dataset API provided its own variant of its most popular methods - filter, map and reduce. These work (as would be expected) with arbitrary functions. As such, Spark cannot understand the details of such functions and its ability to optimize becomes somewhat impaired as it can no longer correctly propagate certain information (e.g. for predicate pushdown). This will be explained further in the section on serialization.
 
-(TODO: Dataset map inefficiency example)
+```scala
+val input = spark.read.parquet("file:///tmp/test_data")
+val dataframe = input.select('key).where('key === 1)
+val dataset = input.as[(Int, Int)].map(_._1).filter(_ == 1)
+```
+
+```
+== Parsed Logical Plan (dataframe) ==
+'Filter ('key = 1)
++- Project [key#43]
+   +- Relation[key#43,value#44] parquet
+
+== Parsed Logical Plan (dataset) ==
+'TypedFilter <function1>, int, [StructField(value,IntegerType,false)], unresolveddeserializer(upcast(getcolumnbyordinal(0, IntegerType), IntegerType, - root class: "scala.Int"))
++- SerializeFromObject [input[0, int, false] AS value#57]
+   +- MapElements <function1>, class scala.Tuple2, [StructField(_1,IntegerType,false), StructField(_2,IntegerType,false)], obj#56: int
+      +- DeserializeToObject newInstance(class scala.Tuple2), obj#55: scala.Tuple2
+         +- Relation[key#43,value#44] parquet
+
+== Physical Plan (dataframe) ==
+*Project [key#43]
++- *Filter (isnotnull(key#43) && (key#43 = 1))
+   +- *FileScan parquet [key#43] Batched: true, Format: Parquet, Location: InMemoryFileIndex[file:/tmp/test_data], PartitionFilters: [], PushedFilters: [IsNotNull(key), EqualTo(key,1)], ReadSchema: struct<key:int>
+
+== Physical Plan (dataset) ==
+*SerializeFromObject [input[0, int, false] AS value#57]
++- *Filter <function1>.apply$mcZI$sp
+   +- *MapElements <function1>, obj#56: int
+      +- *DeserializeToObject newInstance(class scala.Tuple2), obj#55: scala.Tuple2
+         +- *FileScan parquet [key#43,value#44] Batched: true, Format: Parquet, Location: InMemoryFileIndex[file:/tmp/test_data], PartitionFilters: [], PushedFilters: [], ReadSchema: struct<key:int,value:int>
+```
 
 ### Parallel transformations
 
@@ -262,6 +302,7 @@ val joined = input1.cogroup(input2)
 ```
 
 ```
+== Partition sizes ==
 input1: 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 24
 input2: 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 24
 joined: 82, 2, 99, 0, 79, 1, 100, 1, 106, 0, 81, 2, 93, 0, 86, 0, 112, 0, 102, 0, 91, 0, 91, 0, 110, 0, 105, 0, 90, 1, 73, 1, 97, 1, 116, 0, 75, 0, 108, 1, 94, 0
