@@ -214,7 +214,23 @@ However, there is one caveat to keep in mind when it comes to Datasets. As devel
 
 Spark can run multiple computations in parallel. This is easily achieved by starting multiple threads on the driver and issuing a set of transformations in each of them. The resulting tasks are then run concurrently and share the application's resources. This ensures that the resources are never kept idle (e.g. while waiting for the last tasks of a particular transformation to finish). By default, tasks are processed in a FIFO manner (on the job level), but this can be changed by using an alternative in-application scheduler to ensure fairness (by setting `spark.scheduler.mode` to `FAIR`). Threads are then expected to set their scheduling pool by setting the `spark.scheduler.pool` local property (using `SparkContext.setLocalProperty`) to the appropriate pool name. Per-pool resource allocation configuration should then be provided in an [XML file](https://spark.apache.org/docs/latest/job-scheduling.html#configuring-pool-properties) defined by the `spark.scheduler.allocation.file` setting (by default this is `fairscheduler.xml` in Spark's conf folder).
 
-(TODO: Parallel transformations example)
+```scala
+def input(i: Int) = sc.parallelize(1 to i*100000)
+def serial = (1 to 10).map(i => input(i).reduce(_ + _)).reduce(_ + _)
+def parallel = (1 to 10).map(i => Future(input(i).reduce(_ + _))).map(Await.result(_, 10.minutes)).reduce(_ + _)
+```
+
+```
++-------+------------------+------------------+
+|summary|            serial|          parallel|
++-------+------------------+------------------+
+|  count|                10|                10|
+|   mean|             173.1|             141.0|
+| stddev|59.590174432442204|23.593784492248517|
+|    min|               140|               122|
+|    max|               336|               200|
++-------+------------------+------------------+
+```
 
 ## 2. Partitioning
 
@@ -226,15 +242,38 @@ Our input can already be skewed when reading from the data source. In the RDD AP
 
 Partitioning characteristics frequently change on shuffle boundaries. Operations that imply a shuffle therefore provide a `numPartitions` parameter that specify the new partition count (by default the partition count stays the same as in the original RDD). Skew can also be introduced via shuffles, especially when joining datasets.
 
-(TODO: RDD join skew example)
+```scala
+val input = sc.parallelize(1 to 1000, 42).keyBy(Math.min(_, 10))
+val joined = input.cogroup(input)
+```
+
+```
+== Partition sizes ==
+input: 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 24
+joined: 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1982, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+```
 
 As the partitioning in these cases depends entirely on the selected key (specifically its Murmur3 hash), care has to be taken to avoid unusually large partitions being created for common keys (e.g. null keys are a common special case). An efficient solution is to separate the relevant records, introduce a salt (random value) to their keys and perform the subsequent action (e.g. reduce) for them in multiple stages to get the correct result.
 
-(TODO: RDD join salting example)
+```scala
+val input1 = sc.parallelize(1 to 1000, 42).keyBy(Math.min(_, 10) + Random.nextInt(100) * 100)
+val input2 = sc.parallelize(1 to 1000, 42).keyBy(Math.min(_, 10) + Random.nextInt(100) * 100)
+val joined = input1.cogroup(input2)
+```
+
+```
+input1: 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 24
+input2: 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 24
+joined: 82, 2, 99, 0, 79, 1, 100, 1, 106, 0, 81, 2, 93, 0, 86, 0, 112, 0, 102, 0, 91, 0, 91, 0, 110, 0, 105, 0, 90, 1, 73, 1, 97, 1, 116, 0, 75, 0, 108, 1, 94, 0
+```
 
 Sometimes there are even better solutions, like using map-side joins if one of the datasets is small enough.
 
-(TODO: RDD map-side join example)
+```scala
+val input = sc.parallelize(1 to 1000000, 42)
+val lookup = Map(0 -> "a", 1 -> "b", 2 -> "c")
+val joined = input.map(x => x -> lookup(x % 3))
+```
 
 ### DataFrames and Datasets
 
@@ -310,7 +349,11 @@ Here we prepare the value by storing it in a local variable `sum`. This then get
 
 Spark also defines a special construct to improve performance in cases where we need to serialize the same value for multiple transformations. It is called a broadcast variable and is serialized and sent only once, before the computation, to all executors. This is especially useful for large variables like lookup tables.
 
-(TODO: Broadcast example)
+```scala
+val broadcastMap = sc.broadcast(Map(0 -> "a", 1 -> "b", 2 -> "c"))
+val input = sc.parallelize(1 to 1000000, 42)
+val joined = input.map(x => x -> input.value(x % 3))
+```
 
 Spark provides a useful tool to determine the actual size of objects in memory called [SizeEstimator](https://spark.apache.org/docs/latest/api/java/index.html?org/apache/spark/util/SizeEstimator.html) which can help us to decide whether a particular object is a good candidate for a broadcast variable.
 
