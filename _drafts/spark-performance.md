@@ -355,32 +355,22 @@ val shuffled = input.repartition(43).count()
  |        CachedPartitions: 42; MemorySize: 0.0 B; ExternalBlockStoreSize: 0.0 B; DiskSize: 3.8 GB
  |   ParallelCollectionRDD[0] at parallelize at <console>:25 [Disk Serialized 1x Replicated]
 
-== Timings (Java) ==
-+-------+------------------+
-|summary|             value|
-+-------+------------------+
-|  count|                10|
-|   mean|           65990.9|
-| stddev|1351.8518533231852|
-|    min|             64482|
-|    max|             68148|
-+-------+------------------+
-
 == Lineage (Kryo) ==
 (42) MapPartitionsRDD[1] at map at <console>:25 [Disk Serialized 1x Replicated]
  |        CachedPartitions: 42; MemorySize: 0.0 B; ExternalBlockStoreSize: 0.0 B; DiskSize: 3.1 GB
  |   ParallelCollectionRDD[0] at parallelize at <console>:25 [Disk Serialized 1x Replicated]
 
-== Timings (Kryo) ==
-+-------+------------------+
-|summary|             value|
-+-------+------------------+
-|  count|                10|
-|   mean|           30196.5|
-| stddev|1546.0322154182659|
-|    min|             28322|
-|    max|             33012|
-+-------+------------------+
+
+== Timings ==
++-------+------------------+------------------+
+|summary|              java|              kryo|
++-------+------------------+------------------+
+|  count|                10|                10|
+|   mean|           65990.9|           30196.5|
+| stddev|1351.8518533231852|1546.0322154182659|
+|    min|             64482|             28322|
+|    max|             68148|             33012|
++-------+------------------+------------------+
 ```
 
 ### DataFrames and Datasets
@@ -409,7 +399,7 @@ val shuffled = input.repartition(43).count()
 
 == Timings ==
 +-------+-----------------+
-|summary|            value|
+|summary|         tungsten|
 +-------+-----------------+
 |  count|               10|
 |   mean|           1102.9|
