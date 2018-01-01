@@ -276,7 +276,7 @@ def parallel = (1 to 10).map(i => Future(input(i).reduce(_ + _))).map(Await.resu
 
 The number two problem that most Spark jobs suffer from, is inadequate partitioning of data. In order for our computations to be efficient, it is important to divide our data into a large enough number of partitions that are as close in size to one another (uniform) as possible, so that Spark can schedule the individual tasks that are operating on them in an agnostic manner and still perform predictably. If the partitions are not uniform, we say that the partitioning is skewed. This can happen for a number of reasons and in different parts of our computation.
 
-(TODO: Partitioning skew example)
+![Partitioning skew example](/images/2018-01-01-spark-performance/skew.png)
 
 Our input can already be skewed when reading from the data source. In the RDD API this is often done using the `textFile` and `wholeTextFiles` methods, which have surprisingly different partitioning behaviors. The `textFile` method, which is designed to read individual lines of text from (usually larger) files, loads each input file block as a separate partition by default. It also provides a `minPartitions` parameter that, when greater than the number of blocks, tries to split these partitions further in order to satisfy the specified value. On the other hand, the `wholeTextFiles` method, which is used to read the whole contents of (usually smaller) files, combines the relevant files' blocks into pools by their actual locality inside the cluster and, by default, creates a partition for each of these pools (for more information see Hadoop's [CombineFileInputFormat](http://hadoop.apache.org/docs/current/api/org/apache/hadoop/mapreduce/lib/input/CombineFileInputFormat.html) which is used in its implementation). The `minPartitions` parameter in this case controls the maximum size of these pools (equalling `totalSize/minPartitions`). The default value for all `minPartitions` parameters is 2. This means that it is much easier to get a very low number of partitions with `wholeTextFiles` if using default settings while not managing data locality explicitly on the cluster. Other methods used to read data into RDDs include other formats such as `sequenceFile`, `binaryFiles` and `binaryRecords`, as well as generic methods `hadoopRDD` and `newAPIHadoopRDD` which take custom format implementations (allowing for custom partitioning).
 
@@ -338,13 +338,86 @@ Another thing that is tricky to take care of correctly is serialization, which c
 
 Spark supports two different serializers for data serialization. The default one is Java serialization which, although it is very easy to use (by simply implementing the `Serializable` interface), is very inefficient. That is why it is advisable to switch to the second supported serializer, [Kryo](https://github.com/EsotericSoftware/kryo), for the majority of production uses. This is done by setting `spark.serializer` to `org.apache.spark.serializer.KryoSerializer`. Kryo is much more efficient and does not require the classes to implement `Serializable` (as they are serialized by Kryo's [FieldSerializer](https://github.com/EsotericSoftware/kryo#fieldserializer) by default). However, in very rare cases, Kryo can fail to serialize some classes, which is the sole reason why it is still not Spark's default. It is also a good idea to register all classes that are expected to be serialized (Kryo will then be able to use indices instead of full class names to identify data types, reducing the size of the serialized data thereby increasing performance even further).
 
-(TODO: Kryo vs Java serialization benchmark)
+```scala
+case class Test(a: Int = Random.nextInt(1000000),
+                b: Double = Random.nextDouble,
+                c: String = Random.nextString(1000),
+                d: Seq[Int] = (1 to 100).map(_ => Random.nextInt(1000000))) extends Serializable
+
+val input = sc.parallelize(1 to 1000000, 42).map(_ => Test()).persist(DISK_ONLY)
+input.count() // Force initialization
+val shuffled = input.repartition(43).count()
+```
+
+```
+== Lineage (Java) ==
+(42) MapPartitionsRDD[1] at map at <console>:25 [Disk Serialized 1x Replicated]
+ |        CachedPartitions: 42; MemorySize: 0.0 B; ExternalBlockStoreSize: 0.0 B; DiskSize: 3.8 GB
+ |   ParallelCollectionRDD[0] at parallelize at <console>:25 [Disk Serialized 1x Replicated]
+
+== Timings (Java) ==
++-------+------------------+
+|summary|             value|
++-------+------------------+
+|  count|                10|
+|   mean|           65990.9|
+| stddev|1351.8518533231852|
+|    min|             64482|
+|    max|             68148|
++-------+------------------+
+
+== Lineage (Kryo) ==
+(42) MapPartitionsRDD[1] at map at <console>:25 [Disk Serialized 1x Replicated]
+ |        CachedPartitions: 42; MemorySize: 0.0 B; ExternalBlockStoreSize: 0.0 B; DiskSize: 3.1 GB
+ |   ParallelCollectionRDD[0] at parallelize at <console>:25 [Disk Serialized 1x Replicated]
+
+== Timings (Kryo) ==
++-------+------------------+
+|summary|             value|
++-------+------------------+
+|  count|                10|
+|   mean|           30196.5|
+| stddev|1546.0322154182659|
+|    min|             28322|
+|    max|             33012|
++-------+------------------+
+```
 
 ### DataFrames and Datasets
 
-The high-level APIs are much more efficient when it comes to data serialization as they are aware of the actual data types they are working with. Thanks to this, they can generate optimized serialization code tailored specifically to these types and to the way Spark will be using them in the context of the whole computation. For some transformations it might also generate only partial serialization code (e.g. array lookups). This code generation step is a component of Project Tungsten which is a big part of what makes the high-level APIs so performant.
+The high-level APIs are much more efficient when it comes to data serialization as they are aware of the actual data types they are working with. Thanks to this, they can generate optimized serialization code tailored specifically to these types and to the way Spark will be using them in the context of the whole computation. For some transformations it may also generate only partial serialization code (e.g. counts or array lookups). This code generation step is a component of Project Tungsten which is a big part of what makes the high-level APIs so performant.
 
-(TODO: Project Tungsten serialization benchmark)
+```scala
+val input = sc.parallelize(1 to 1000000, 42).map(_ => Test()).toDS.persist(org.apache.spark.storage.StorageLevel.DISK_ONLY)
+input.count() // Force initialization
+val shuffled = input.repartition(43).count()
+```
+
+```
+== Lineage ==
+(42) MapPartitionsRDD[13] at rdd at <console>:30 []
+ |   MapPartitionsRDD[12] at rdd at <console>:30 []
+ |   MapPartitionsRDD[11] at rdd at <console>:30 []
+ |   *SerializeFromObject [assertnotnull(input[0, $line16.$read$$iw$$iw$Test, true]).a AS a#5, assertnotnull(input[0, $line16.$read$$iw$$iw$Test, true]).b AS b#6, staticinvoke(class org.apache.spark.unsafe.types.UTF8String, StringType, fromString, assertnotnull(input[0, $line16.$read$$iw$$iw$Test, true]).c, true) AS c#7, newInstance(class org.apache.spark.sql.catalyst.util.GenericArrayData) AS d#8]
++- Scan ExternalRDDScan[obj#4]
+ MapPartitionsRDD[4] at persist at <console>:27 []
+ |       CachedPartitions: 42; MemorySize: 0.0 B; ExternalBlockStoreSize: 0.0 B; DiskSize: 3.2 GB
+ |   MapPartitionsRDD[3] at persist at <console>:27 []
+ |   MapPartitionsRDD[2] at persist at <console>:27 []
+ |   MapPartitionsRDD[1] at map at <console>:27 []
+ |   ParallelCollectionRDD[0] at parallelize at <console>:27 []
+
+== Timings ==
++-------+-----------------+
+|summary|            value|
++-------+-----------------+
+|  count|               10|
+|   mean|           1102.9|
+| stddev|262.7954210661467|
+|    min|              912|
+|    max|             1776|
++-------+-----------------+
+```
 
 ### Closure serialization
 
@@ -404,15 +477,15 @@ It is important for the application to use its memory space in an efficient mann
 
 ### Driver memory
 
-(TODO: Spark driver memory diagram)
+![Spark driver memory diagram](/images/2018-01-01-spark-performance/spark-driver-memory.svg)
 
 Driver's memory structure is quite straightforward. It merely uses all its configured memory (governed by the `spark.driver.memory` setting, 1GB by default) as its shared heap space. In a cluster deployment setting there is also an overhead added to prevent YARN from killing the driver container prematurely for using too much resources.
 
 ### Executor memory
 
-(TODO: Spark executor memory diagram)
+![Spark executor memory diagram](/images/2018-01-01-spark-performance/spark-executor-memory.svg)
 
-Executors need to use their memory for a few main purposes: intermediate data for the current transformation (execution memory), persistent data for caching (storage memory) and custom data structures used in transformations (user memory). As Spark can compute the actual size of each stored record, it is able to monitor the execution and storage parts and react accordingly. Execution memory is usually very volatile in size and needed in an immediate manner, whereas storage memory is longer-lived, stable, can usually be evicted to disk and applications usually need it just for certain parts of the whole computation (and sometimes not at all). For that reason Spark defines a shared space for both, giving priority to execution memory. All of this is controlled by several settings: `spark.executor.memory` (1GB by default) defines the total size of heap space available, `spark.memory.fraction` setting (0.6 by default) defines a fraction of heap (minus a 300MB buffer) for the memory shared by execution and storage and `spark.memory.storageFraction` (0.5 by default) defines the fraction of storage memory that is unevictable by execution. It is useful to define these in a manner most suitable for your application. If, for example, the application heavily uses cached data and does not use aggregations heavily, you can increase the fraction of storage memory to accommodate storing all cached data in RAM, there speeding up reads of the data. On the other hand, if the application uses costly aggregations and does not heavily rely on caching, increasing execution memory can help by evicting unneeded cached data to improve the computation itself. Furthermore, keep in mind that your custom objects have to fit into the user memory.
+Executors need to use their memory for a few main purposes: intermediate data for the current transformation (execution memory), persistent data for caching (storage memory) and custom data structures used in transformations (user memory). As Spark can compute the actual size of each stored record, it is able to monitor the execution and storage parts and react accordingly. Execution memory is usually very volatile in size and needed in an immediate manner, whereas storage memory is longer-lived, stable, can usually be evicted to disk and applications usually need it just for certain parts of the whole computation (and sometimes not at all). For that reason Spark defines a shared space for both, giving priority to execution memory. All of this is controlled by several settings: `spark.executor.memory` (1GB by default) defines the total size of heap space available, `spark.memory.fraction` setting (0.6 by default) defines a fraction of heap (minus a 300MB buffer) for the memory shared by execution and storage and `spark.memory.storageFraction` (0.5 by default) defines the fraction of storage memory that is unevictable by execution. It is useful to define these in a manner most suitable for your application. If, for example, the application heavily uses cached data and does not use aggregations heavily, you can increase the fraction of storage memory to accommodate storing all cached data in RAM, speeding up reads of the data. On the other hand, if the application uses costly aggregations and does not heavily rely on caching, increasing execution memory can help by evicting unneeded cached data to improve the computation itself. Furthermore, keep in mind that your custom objects have to fit into the user memory.
 
 Spark can also use off-heap memory for storage and part of execution, which is controlled by the settings `spark.memory.offHeap.enabled` (false by default) and `spark.memory.offHeap.size` (0 by default) and `OFF_HEAP` persistence level. This can mitigate garbage collection pauses.
 
