@@ -493,11 +493,11 @@ In order to achieve good performance, our application's computation should opera
 
 We can reduce the amount of inter-node communication required by increasing the resources of a single executor while decreasing the overall number of executors, essentially forcing tasks to be processed by a limited number of nodes. Take the following example resource distribution:
 
-| num_executors | executor_cores | executor_memory |
-|--------------:|---------------:|----------------:|
-| 15            | 1              | 1g              |
-| 5             | 3              | 3g              |
-| 3             | 5              | 5g              |
+| num\_executors | executor\_cores | executor\_memory |
+|---------------:|----------------:|-----------------:|
+| 15             | 1               | 1g               |
+| 5              | 3               | 3g               |
+| 3              | 5               | 5g               |
 
 In all of the instances, we'll be using the same amount of resources (15 cores and 15GB of memory). However, as we reduce the overall number of executors, we also reduce the need to transport data between them. Making the third option usually the fastest. On the other hand, there can be limitations in I/O throughput on a node level, depending on the operations requested, so we cannot increase this indefinitely. For example, for HDFS I/O the number of cores per executor is thought to peak in performance at about five.
 
@@ -519,4 +519,4 @@ Sometimes, even though we do everything correctly, we may still get poor perform
 
 ## Conclusion
 
-(TODO)
+As you can see, designing a Spark application for performance can be quite challenging and every step of the way seems to take its toll in terms of increased complexity, reduced versatility or prolonged analysis of the specific use case. Fortunately, it is seldom required to implement all of them as typical Spark applications are not as performance-sensitive anyway. Furthermore, a great deal can be achieved just by using the high-level APIs (DataFrames or Datasets). Although the decision to use them has to be made very early in the development process as switching them is not trivial.
