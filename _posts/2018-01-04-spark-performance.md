@@ -14,7 +14,7 @@ Development of Spark jobs seems easy enough on the surface and for the most part
 In this article I will talk about the most common performance problems that you can run into when developing Spark applications and how to avoid or mitigate them.
 
 
-![Title image](/images/2018-01-04-spark-performance/title.png)
+![Title image](/images/2018-01-04-spark-performance/title.jpg)
 
 ## 1. Transformations
 
