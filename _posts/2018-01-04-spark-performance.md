@@ -288,10 +288,7 @@ val input = sc.parallelize(1 to 1000, 42).keyBy(Math.min(_, 10))
 val joined = input.cogroup(input)
 ```
 
-| RDD    | Partition sizes                                                                                                                                                        |
-|--------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------:|
-| input  | 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 24 |
-| joined |                                        0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1982, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 |
+![Join partition sizes](/images/2018-01-04-spark-performance/join-partitions.png)
 
 As the partitioning in these cases depends entirely on the selected key (specifically its [Murmur3 hash](https://en.wikipedia.org/wiki/MurmurHash)), care has to be taken to avoid unusually large partitions being created for common keys (e.g. null keys are a common special case). An efficient solution is to separate the relevant records, introduce a salt (random value) to their keys and perform the subsequent action (e.g. reduce) for them in multiple stages to get the correct result.
 
@@ -301,11 +298,7 @@ val input2 = sc.parallelize(1 to 1000, 42).keyBy(Math.min(_, 10) + Random.nextIn
 val joined = input1.cogroup(input2)
 ```
 
-| RDD    | Partition sizes                                                                                                                                                        |
-|--------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------:|
-| input1 | 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 24 |
-| input2 | 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 23, 24, 24, 24, 24, 24 |
-| joined |              82, 2, 99, 0, 79, 1, 100, 1, 106, 0, 81, 2, 93, 0, 86, 0, 112, 0, 102, 0, 91, 0, 91, 0, 110, 0, 105, 0, 90, 1, 73, 1, 97, 1, 116, 0, 75, 0, 108, 1, 94, 0 |
+![Salted join partition sizes](/images/2018-01-04-spark-performance/join-partitions-salt.png)
 
 Sometimes there are even better solutions, like using map-side joins if one of the datasets is small enough.
 
